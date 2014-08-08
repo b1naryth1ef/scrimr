@@ -4,7 +4,7 @@
 #include <sdktools>
 #include <cstrike>
 
-new String:CHAT_PREFIX[64] = "SCRIMR";
+new String:CHAT_PREFIX[7] = "SCRIMR";
 
 enum State {
     STATE_NULL = 0,
@@ -18,7 +18,9 @@ new map_number = 0;
 new g_iAccount = -1;
 new State:STATE = STATE_NULL;
 new String:mapA[32], String:mapB[32], String:mapC[32];
-new teams_ready[2];
+
+new TEAMS_READY[2];
+new WHICH_TEAMS[MAXPLAYERS + 1];
 
 MessageChat(index, const String:format[], any:...) {
     new String:msg[2048];
@@ -46,12 +48,16 @@ public OnPluginStart() {
         "Starts the knife-round on three countdown.");
     RegAdminCmd("setup", Setup, ADMFLAG_CUSTOM1,
         "Sets up a match.");
+    RegAdminCmd("next", NextMap, ADMFLAG_CUSTOM1,
+        "Switches to the next map.");
 
     RegConsoleCmd("say", SayChat);
     RegConsoleCmd("say_team", SayChat);
 
     HookEvent("round_start", Event_Round_Start);
     HookEvent("round_end", Event_Round_End);
+    HookEvent("announce_phase_end", MatchEnd);
+    HookEvent("player_team", Event_Player_Team_Pre, EventHookMode_Pre);
 }
 
 public OnMapStart() {
@@ -68,6 +74,23 @@ SwitchNextMap() {
     }
 }
 
+public MatchEnd(Handle:event, const String:name[], bool:dontBroadcast) {
+}
+
+public Event_Player_Team_Pre(Handle:event, const String:name[], bool:dontBroadcast) {
+    new client = GetClientOfUserId(GetEventInt(event, "userid"));
+    new new_team = GetEventInt(event, "team");
+    
+    if (map_number >= 2) {
+        SetEventInt(event, "team", WHICH_TEAMS[client]);
+    }
+}
+
+
+public Action:NextMap(client, args) {
+    SwitchNextMap();
+    return Plugin_Handled;
+}
 
 // .setup de_nuke de_inferno de_cache
 public Action:Setup(client, args) {
@@ -149,13 +172,13 @@ stock CS_StripButKnife(client, bool:equip=true) {
 
 CheckReady() {
     // If both teams are ready start the game
-    if (!teams_ready[0] || !teams_ready[1]) {
+    if (!TEAMS_READY[0] || !TEAMS_READY[1]) {
         return;
     }
 
     // Reset states
-    teams_ready[0] = false;
-    teams_ready[1] = false;
+    TEAMS_READY[0] = false;
+    TEAMS_READY[1] = false;
 
     // Start the match
     StartMatch();
@@ -182,6 +205,12 @@ StartMatch() {
     ServerCommand("mp_warmup_end");
     ServerCommand("mp_restartgame 6");
     CreateTimer(6.0, TIMER_MessageStart);
+
+    // If this wasnt the first match, we won't have a demo running from knife round and thus need to
+    //  start the demo.
+    if (map_number != 1) {
+        StartDemo();
+    }
 }
 
 StartKnifeRound() {
@@ -203,6 +232,12 @@ public Action:TIMER_MessageStart(Handle:timer) {
 public Action:TIMER_MessageKnife(Handle:timer) {
     for (new i = 0; i < 5; i++) {
         MessageChat(-1, "!! KNIFE ROUND IS LIVE !!");
+    }
+}
+
+StoreTeams() {
+    for (new i = 1; i <= MaxClients; i++) {
+        WHICH_TEAMS[i] = GetClientTeam(i);
     }
 }
 
@@ -236,10 +271,12 @@ public Action:SayChat(client, args) {
 
                 ServerCommand("mp_unpause_match 1");
                 STATE = STATE_WARMUP;
+                ServerCommand("mp_warmup_start");
+                StoreTeams();
             }
         } else if (StrEqual(command, "ready", false)) {
-            if (!teams_ready[GetClientTeam(client) - 2]) {
-                teams_ready[GetClientTeam(client) - 2] = true;
+            if (!TEAMS_READY[GetClientTeam(client) - 2]) {
+                TEAMS_READY[GetClientTeam(client) - 2] = true;
 
                 new String:team_name[32];
                 GetTeamName(GetClientTeam(client), team_name, sizeof(team_name));
@@ -248,8 +285,8 @@ public Action:SayChat(client, args) {
                 CheckReady();
             }
         } else if (StrEqual(command, "unready", false)) {
-            if (teams_ready[GetClientTeam(client) - 2]) {
-                teams_ready[GetClientTeam(client) - 2] = false;
+            if (TEAMS_READY[GetClientTeam(client) - 2]) {
+                TEAMS_READY[GetClientTeam(client) - 2] = false;
 
                 new String:team_name[32];
                 GetTeamName(GetClientTeam(client), team_name, sizeof(team_name));
