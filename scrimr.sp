@@ -79,8 +79,7 @@ public MatchEnd(Handle:event, const String:name[], bool:dontBroadcast) {
 
 public Event_Player_Team_Pre(Handle:event, const String:name[], bool:dontBroadcast) {
     new client = GetClientOfUserId(GetEventInt(event, "userid"));
-    new new_team = GetEventInt(event, "team");
-    
+
     if (map_number >= 2) {
         SetEventInt(event, "team", WHICH_TEAMS[client]);
     }
