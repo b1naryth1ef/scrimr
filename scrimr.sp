@@ -14,6 +14,7 @@ enum State {
 };
 
 new knife_winner = -1;
+new map_number = 0;
 new g_iAccount = -1;
 new State:STATE = STATE_NULL;
 new String:mapA[32], String:mapB[32], String:mapC[32];
@@ -53,6 +54,20 @@ public OnPluginStart() {
     HookEvent("round_end", Event_Round_End);
 }
 
+public OnMapStart() {
+    map_number += 1;
+    STATE = STATE_WARMUP;
+}
+
+SwitchNextMap() {
+    switch (map_number) {
+        case 1:
+            ServerCommand("map %s", mapB);
+        case 2:
+            ServerCommand("map %s", mapC);
+    }
+}
+
 
 // .setup de_nuke de_inferno de_cache
 public Action:Setup(client, args) {
@@ -64,6 +79,8 @@ public Action:Setup(client, args) {
         MessageChat(client, "Invalid Maps!");
         return Plugin_Handled;
     }
+
+    ServerCommand("map %s", mapA);
 
     return Plugin_Handled;
 }
