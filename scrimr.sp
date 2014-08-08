@@ -17,6 +17,7 @@ new knife_winner = -1;
 new g_iAccount = -1;
 new State:STATE = STATE_NULL;
 new String:mapA[32], String:mapB[32], String:mapC[32];
+new teams_ready[2];
 
 MessageChat(index, const String:format[], any:...) {
     new String:msg[2048];
@@ -129,17 +130,60 @@ stock CS_StripButKnife(client, bool:equip=true) {
 }
 
 
-StartMatch() {}
+CheckReady() {
+    // If both teams are ready start the game
+    if (!teams_ready[0] || !teams_ready[1]) {
+        return;
+    }
+
+    // Reset states
+    teams_ready[0] = false;
+    teams_ready[1] = false;
+
+    // Start the match
+    StartMatch();
+}
+
+StartDemo() {
+    decl String:map_name[128], String:demo_filename[256], String:date[32], String:team_a[64],
+        String:team_b[64];
+
+    GetCurrentMap(map_name, sizeof(map_name));
+    GetTeamName(CS_TEAM_T, team_a, sizeof(team_a));
+    GetTeamName(CS_TEAM_CT, team_b, sizeof(team_b));
+
+    FormatTime(date, sizeof(date), "%Y-%m-%d-%H%M");
+    Format(demo_filename, sizeof(demo_filename), "%s-%04x-%s-%s-vs-%s", date, GetConVarInt(FindConVar("hostport")),
+        map_name, team_a, team_b);
+
+    ServerCommand("tv_record %s.dem", demo_filename);
+}
+
+StartMatch() {
+    STATE = STATE_LIVE;
+    MessageChat(-1, "BOTH TEAMS READY! STARTING GAME!");
+    ServerCommand("mp_warmup_end");
+    ServerCommand("mp_restartgame 6");
+    CreateTimer(6.0, TIMER_MessageStart);
+}
 
 StartKnifeRound() {
     STATE = STATE_KNIFE;
     MessageChat(-1, "KNIFE ROUND IS LIVE ON THREE...");
     ServerCommand("mp_warmup_end");
     ServerCommand("mp_restartgame 6");
-    CreateTimer(6, TIMER_SetupKnifeRound);
+    CreateTimer(6.0, TIMER_MessageKnife);
+
+    StartDemo();
 }
 
-public Action:TIMER_SetupKnifeRound(Handle:timer) {
+public Action:TIMER_MessageStart(Handle:timer) {
+    for (new i = 0; i < 5; i++) {
+        MessageChat(-1, "!! GAME IS LIVE !!");
+    }
+}
+
+public Action:TIMER_MessageKnife(Handle:timer) {
     for (new i = 0; i < 5; i++) {
         MessageChat(-1, "!! KNIFE ROUND IS LIVE !!");
     }
@@ -159,9 +203,8 @@ public Action:SayChat(client, args) {
         strcopy(command, sizeof(message), message[1]);
 
         if (StrEqual(command, "stay", false) || StrEqual(command, "swap", false)) {
-            // new team = GetClientTeam(
             if (STATE == STATE_KNIFE && knife_winner == GetClientTeam(client)) {
-                new String:this_team[32], String:other_team[32];
+                new String:this_team[32]; //, String:other_team[32];
                 GetTeamName(knife_winner, this_team, 32);
                 // GetTeamName(knife_winner == CS_TEAM_T ? CS_TEAM_CT : CS_TEAM_T, other_team, 32);
 
@@ -176,9 +219,29 @@ public Action:SayChat(client, args) {
 
                 ServerCommand("mp_unpause_match 1");
                 STATE = STATE_WARMUP;
-            } else {
-                return Plugin_Handled;
+            }
+        } else if (StrEqual(command, "ready", false)) {
+            if (!teams_ready[GetClientTeam(client) - 2]) {
+                teams_ready[GetClientTeam(client) - 2] = true;
+
+                new String:team_name[32];
+                GetTeamName(GetClientTeam(client), team_name, sizeof(team_name));
+                MessageChat(-1, "%s are ready.", team_name);
+
+                CheckReady();
+            }
+        } else if (StrEqual(command, "unready", false)) {
+            if (teams_ready[GetClientTeam(client) - 2]) {
+                teams_ready[GetClientTeam(client) - 2] = false;
+
+                new String:team_name[32];
+                GetTeamName(GetClientTeam(client), team_name, sizeof(team_name));
+                MessageChat(-1, "%s are no longer ready.", team_name);
+
+                CheckReady();
             }
         }
     }
+
+    return Plugin_Handled;
 }
