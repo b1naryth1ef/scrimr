@@ -20,6 +20,7 @@ new State:STATE = STATE_NULL;
 new String:mapA[32], String:mapB[32], String:mapC[32];
 
 new TEAMS_READY[2];
+new TEAM_LEADERS[2];
 new WHICH_TEAMS[MAXPLAYERS + 1];
 
 MessageChat(index, const String:format[], any:...) {
@@ -44,12 +45,8 @@ public Plugin:myinfo = {
 public OnPluginStart() {
     g_iAccount = FindSendPropOffs("CCSPlayer", "m_iAccount");
 
-    RegAdminCmd("ko3", KnifeOnThree, ADMFLAG_CUSTOM1,
-        "Starts the knife-round on three countdown.");
-    RegAdminCmd("setup", Setup, ADMFLAG_CUSTOM1,
-        "Sets up a match.");
-    RegAdminCmd("next", NextMap, ADMFLAG_CUSTOM1,
-        "Switches to the next map.");
+    RegAdminCmd("setup", Setup, ADMFLAG_CUSTOM1, "Sets up a match.");
+    RegAdminCmd("next", NextMap, ADMFLAG_CUSTOM1, "Switches to the next map.");
 
     RegConsoleCmd("say", SayChat);
     RegConsoleCmd("say_team", SayChat);
@@ -63,6 +60,9 @@ public OnPluginStart() {
 public OnMapStart() {
     map_number += 1;
     STATE = STATE_WARMUP;
+    ServerCommand("mp_warmup_start");
+    ServerCommand("mp_warmuptime 999999999");
+    ServerCommand("bot_kick");
 }
 
 SwitchNextMap() {
@@ -107,12 +107,6 @@ public Action:Setup(client, args) {
     return Plugin_Handled;
 }
 
-
-public Action:KnifeOnThree(client, args) {
-    StartKnifeRound();
-    return Plugin_Handled;
-}
-
 public Event_Round_Start(Handle:event, const String:name[], bool:dontBroadcast) {
     if (STATE == STATE_KNIFE) {
         for (new i = 1; i <= MaxClients; i++) {
@@ -128,6 +122,7 @@ public Event_Round_End(Handle:event, const String:name[], bool:dontBroadcast) {
     if (STATE == STATE_KNIFE) {
         knife_winner = GetEventInt(event, "winner");
         ServerCommand("mp_pause_match 1");
+        MessageChat(-1, "Match is paused until sides are chosen...");
 
         for (new i = 1; i <= MaxClients; i++) {
             if (IsClientInGame(i) && GetClientTeam(i) == knife_winner) {
@@ -179,8 +174,10 @@ CheckReady() {
     TEAMS_READY[0] = false;
     TEAMS_READY[1] = false;
 
-    // Start the match
-    StartMatch();
+    // Start the knife round if its first map
+    if (map_number == 1) {
+        StartKnifeRound();
+    }
 }
 
 StartDemo() {
@@ -200,10 +197,10 @@ StartDemo() {
 
 StartMatch() {
     STATE = STATE_LIVE;
-    MessageChat(-1, "BOTH TEAMS READY! STARTING GAME!");
+    MessageChat(-1, "GAME IS LIVE ON THREE!!");
     ServerCommand("mp_warmup_end");
     ServerCommand("mp_restartgame 6");
-    CreateTimer(6.0, TIMER_MessageStart);
+    CreateTimer(10.0, TIMER_RestartOne);
 
     // If this wasnt the first match, we won't have a demo running from knife round and thus need to
     //  start the demo.
@@ -216,16 +213,27 @@ StartKnifeRound() {
     STATE = STATE_KNIFE;
     MessageChat(-1, "KNIFE ROUND IS LIVE ON THREE...");
     ServerCommand("mp_warmup_end");
-    ServerCommand("mp_restartgame 6");
-    CreateTimer(6.0, TIMER_MessageKnife);
+    ServerCommand("mp_restartgame 5");
+    CreateTimer(5.5, TIMER_MessageKnife);
 
     StartDemo();
+}
+
+public Action:TIMER_RestartOne(Handle:timer) {
+    ServerCommand("mp_restartgame 5");
+    CreateTimer(5.5, TIMER_RestartTwo);
+}
+
+public Action:TIMER_RestartTwo(Handle:timer) {
+    ServerCommand("mp_restartgame 5");
+    CreateTimer(5.5, TIMER_MessageStart);
 }
 
 public Action:TIMER_MessageStart(Handle:timer) {
     for (new i = 0; i < 5; i++) {
         MessageChat(-1, "!! GAME IS LIVE !!");
     }
+    MessageChat(-1, "GL & HF");
 }
 
 public Action:TIMER_MessageKnife(Handle:timer) {
@@ -269,11 +277,14 @@ public Action:SayChat(client, args) {
                 }
 
                 ServerCommand("mp_unpause_match 1");
-                STATE = STATE_WARMUP;
-                ServerCommand("mp_warmup_start");
                 StoreTeams();
+                StartMatch();
             }
         } else if (StrEqual(command, "ready", false)) {
+            if (client != TEAM_LEADERS[GetClientTeam(client) - 2]) {
+                MessageChat(client, "You are not the team leader!");
+            }
+
             if (!TEAMS_READY[GetClientTeam(client) - 2]) {
                 TEAMS_READY[GetClientTeam(client) - 2] = true;
 
@@ -284,6 +295,10 @@ public Action:SayChat(client, args) {
                 CheckReady();
             }
         } else if (StrEqual(command, "unready", false)) {
+            if (client != TEAM_LEADERS[GetClientTeam(client) - 2]) {
+                MessageChat(client, "You are not the team leader!");
+            }
+
             if (TEAMS_READY[GetClientTeam(client) - 2]) {
                 TEAMS_READY[GetClientTeam(client) - 2] = false;
 
@@ -293,8 +308,10 @@ public Action:SayChat(client, args) {
 
                 CheckReady();
             }
+        } else if (StrEqual(command, "leader", false)) {
+            TEAM_LEADERS[GetClientTeam(client) - 2] = client;
         }
     }
 
-    return Plugin_Handled;
+    return Plugin_Continue;
 }
