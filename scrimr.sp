@@ -39,7 +39,7 @@ public Plugin:myinfo = {
     name = "Scrimr",
     author = "B1nzy",
     description = "Scrim bot for CS:GO games",
-    version = "0.0.1",
+    version = "0.0.2",
     url = "github.com/b1naryth1ef/scrimr"
 };
 
