@@ -3,6 +3,7 @@
 #include <sourcemod>
 #include <sdktools>
 #include <cstrike>
+#include <smlib>
 
 new String:CHAT_PREFIX[7] = "SCRIMR";
 
@@ -25,7 +26,7 @@ new WHICH_TEAMS[MAXPLAYERS + 1];
 
 MessageChat(index, const String:format[], any:...) {
     new String:msg[2048];
-    VFormat(msg, 2048, format, 3);
+    VFormat(msg, sizeof(msg), format, 3);
 
     if (index >= 0) {
         PrintToChat(index, "\x01 \x09[\x04%s\x09]\x01 %s", CHAT_PREFIX, msg);
